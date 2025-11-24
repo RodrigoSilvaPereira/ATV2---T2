@@ -1,0 +1,84 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, master, green ]
+  pull_request:
+    branches: [ main, master, green ]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    name: Code Quality Checks
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run black code formatter check
+      run: |
+        python -m black --check app/ tests/
+    
+    - name: Run flake8 linter
+      run: |
+        python -m flake8 app/ tests/
+    
+    - name: Run isort check
+      run: |
+        python -m isort --check-only app/ tests/
+
+  test:
+    runs-on: ubuntu-latest
+    name: Run Tests
+    needs: quality
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run tests with pytest
+      run: |
+        python -m pytest -v tests/ --cov=app --cov-report=term-missing
+
+    - name: Test API endpoints
+      run: |
+        python -c "
+        from fastapi.testclient import TestClient
+        from app.main import app
+        client = TestClient(app)
+        
+        # Test root endpoint
+        response = client.get('/')
+        assert response.status_code == 200
+        print('✓ Root endpoint working')
+        
+        # Test get existing item
+        response = client.get('/items/1')
+        assert response.status_code == 200
+        print('✓ Get existing item working')
+        
+        # Test get non-existent item
+        response = client.get('/items/999')
+        assert response.status_code == 404
+        print('✓ Get non-existent item returns 404')
+        
+        print('All endpoint tests passed!')
+        "
